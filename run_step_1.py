@@ -58,83 +58,7 @@ print("API_KEY: ", API_KEY)
 
 # print(WEIGHTS_PATH, "; exist:", os.path.isfile(WEIGHTS_PATH))
 # print(CONFIG_PATH, "; exist:", os.path.isfile(CONFIG_PATH))
-model = load_model(CONFIG_PATH, WEIGHTS_PATH)
-device = torch.device("cpu")
-model = model.to(device)
 
-
-
-with open(json_dir, 'r') as file:
-    questions_box = json.load(file)
-
-with open(json_dir, 'r') as file:
-    json_data = json.load(file)
-
-
-os.environ["QWEN_API_KEY"] = os.environ["DASHSCOPE_API_KEY"] = API_KEY
-
-client = OpenAI(
-    api_key=os.getenv("DASHSCOPE_API_KEY"),
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-)
-
-
-completion = client.chat.completions.create(
-    model="qwen-plus",
-    messages=[
-        {'role': 'system', 'content': 'You are a helpful assistant.'},
-        {'role': 'user', 'content': 'Who are you?'}],
-    )
-response_content = completion.choices[0].message.content
-print(response_content)
-
-
-temp_questions_box = []
-list_of_category = []
-
-for json_data in questions_box:
-  image_path = os.path.join(HOME, json_data.get("Image"))
-  # print(image_path)
-  if os.path.exists(image_path):
-    try:
-        with Image.open(image_path) as img:
-            # img.crop([0,0,1,1])
-            temp_questions_box.append(json_data)
-            print(f"Processing {image_path}")
-    except (IOError, UnidentifiedImageError):
-        print(f"Can't Processing {image_path}")
-    except OSError as e:
-        print(f"File Damaged {image_path} - {e}")
-random.shuffle(temp_questions_box)
-
-
-existed_questions_box = []
-
-# print(temp_questions_box)
-
-# list_of_category.append("color")
-# list_of_category.append("count")
-# list_of_category.append("position")
-
-for json_data in temp_questions_box:
-  if json_data.get("Category") not in list_of_category:
-    list_of_category.append(json_data.get("Category"))
-
-
-for category in list_of_category:
-  # print(category)
-  cnt_existed = 0
-  for json_data in temp_questions_box:
-    if json_data.get("Category") == category and cnt_existed +1 <= 5:
-      image_path = os.path.join(HOME, json_data.get("Image"))
-      
-      if os.path.exists(image_path):
-        existed_questions_box.append(json_data)
-
-
-
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-filename = f'record_of_test_{timestamp}.json'
 
 
 def position_cue_qwen(sentence, w = 1.00, h = 1.00):
@@ -656,6 +580,84 @@ def main():
   args = parser.parse_args()
 
   print(args)
+
+  model = load_model(CONFIG_PATH, WEIGHTS_PATH)
+  device = torch.device("cpu")
+  model = model.to(device)
+
+
+
+  with open(json_dir, 'r') as file:
+      questions_box = json.load(file)
+
+  with open(json_dir, 'r') as file:
+      json_data = json.load(file)
+
+
+  os.environ["QWEN_API_KEY"] = os.environ["DASHSCOPE_API_KEY"] = API_KEY
+
+  client = OpenAI(
+      api_key=os.getenv("DASHSCOPE_API_KEY"),
+      base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+  )
+
+
+  completion = client.chat.completions.create(
+      model="qwen-plus",
+      messages=[
+          {'role': 'system', 'content': 'You are a helpful assistant.'},
+          {'role': 'user', 'content': 'Who are you?'}],
+      )
+  response_content = completion.choices[0].message.content
+  print(response_content)
+
+
+  temp_questions_box = []
+  list_of_category = []
+
+  for json_data in questions_box:
+    image_path = os.path.join(HOME, json_data.get("Image"))
+    # print(image_path)
+    if os.path.exists(image_path):
+      try:
+          with Image.open(image_path) as img:
+              # img.crop([0,0,1,1])
+              temp_questions_box.append(json_data)
+              print(f"Processing {image_path}")
+      except (IOError, UnidentifiedImageError):
+          print(f"Can't Processing {image_path}")
+      except OSError as e:
+          print(f"File Damaged {image_path} - {e}")
+  random.shuffle(temp_questions_box)
+
+
+  existed_questions_box = []
+
+  # print(temp_questions_box)
+
+  # list_of_category.append("color")
+  # list_of_category.append("count")
+  # list_of_category.append("position")
+
+  for json_data in temp_questions_box:
+    if json_data.get("Category") not in list_of_category:
+      list_of_category.append(json_data.get("Category"))
+
+
+  for category in list_of_category:
+    # print(category)
+    cnt_existed = 0
+    for json_data in temp_questions_box:
+      if json_data.get("Category") == category and cnt_existed +1 <= 5:
+        image_path = os.path.join(HOME, json_data.get("Image"))
+        
+        if os.path.exists(image_path):
+          existed_questions_box.append(json_data)
+
+
+
+  timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+  filename = f'record_of_test_{timestamp}.json'
 
   for json_data in tqdm(existed_questions_box, desc="Processing questions", unit="question"):
     image_path = os.path.join(HOME, json_data.get("Image"))
