@@ -13,25 +13,6 @@ import argparse
 
 
 
-# json_file_path = os.environ.get("json_file_path")
-# original_json_file_path = os.environ.get("original_json_file_path")
-# image_directory = os.environ.get("image_directory")
-# API_KEY = os.environ.get("API_KEY")
-
-
-
-# os.environ["DASHSCOPE_API_KEY"] = API_KEY
-
-
-with open(json_file_path, 'r', encoding='utf-8') as f:
-    data = json.load(f)
-
-with open(original_json_file_path, 'r', encoding='utf-8') as f:
-    original_data = json.load(f)
-
-with open(list_of_history_dir, 'r', encoding='utf-8') as f:
-    list_of_history = json.load(f)
-
 def crop_image(image: Image.Image, max_pixels: int = 5e5) -> Image.Image:
     width, height = image.size
     total_pixels = width * height
@@ -357,6 +338,28 @@ async def main():
   print("image_directory: ", image_directory)
   print("list_of_history_dir: ", list_of_history_dir)
   print("API_KEY: ", API_KEY)
+
+
+  
+
+  # json_file_path = os.environ.get("json_file_path")
+  # original_json_file_path = os.environ.get("original_json_file_path")
+  # image_directory = os.environ.get("image_directory")
+  # API_KEY = os.environ.get("API_KEY")
+
+
+
+  # os.environ["DASHSCOPE_API_KEY"] = API_KEY
+
+
+  with open(json_file_path, 'r', encoding='utf-8') as f:
+      data = json.load(f)
+
+  with open(original_json_file_path, 'r', encoding='utf-8') as f:
+      original_data = json.load(f)
+
+  with open(list_of_history_dir, 'r', encoding='utf-8') as f:
+      list_of_history = json.load(f)
 
   for entry in tqdm(data, desc="Processing entries", unit="entry"):    
       image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4 = None, None, None, None, None, None, None, None, None, None, None, None
