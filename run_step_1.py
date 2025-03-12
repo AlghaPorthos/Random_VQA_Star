@@ -28,6 +28,7 @@ import argparse
 # print(HOME)
 model = None
 filename = None
+client = None
 """
 Run with:
 CUDA_VISIBLE_DEVICES=5 HF_ENDPOINT=https://hf-mirror.com \
@@ -53,6 +54,7 @@ CUDA_VISIBLE_DEVICES=5 HF_ENDPOINT=https://hf-mirror.com \
 
 
 def position_cue_qwen(sentence, w = 1.00, h = 1.00):
+    global client
     expected_positions = ["right edge", "left edge", "top edge", "bottom edge", "right", "left", "top", "bottom", "bottom right corner", "bottom left corner", "top left corner", "top right corner", "lower right corner", "lower left corner", "upper left corner", "upper right corner", "bottom right", "bottom left", "top left", "top right", "lower right", "lower left", "upper left", "upper right", "central", "middle", "middle right", "middle left", "upper middle", "lower middle", "top middle", "bottom middle", "full frame"]
     text_to_bbox = {
       "right edge":            ((3.00*w)/4.00, 0, w, h),
@@ -137,6 +139,7 @@ def position_cue_qwen(sentence, w = 1.00, h = 1.00):
 
 
 def remove_position_cue_qwen(sentence):
+  global client
   for i in range(1):
     related_bbox, pos_cue = position_cue_qwen(sentence)
     if pos_cue == 'full frame':
@@ -565,6 +568,7 @@ def judge_qwen_api(item, image_dir, image2_bbox, image3_bbox):
 def main():
   global model
   global filename 
+  global client
   parser = argparse.ArgumentParser()
   parser.add_argument("--WEIGHTS_PATH", type=str, required=True)
   parser.add_argument("--json_dir", type=str, required=True)
