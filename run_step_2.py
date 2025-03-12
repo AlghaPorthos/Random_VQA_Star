@@ -5,24 +5,22 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import dashscope
 import random
+from tqdm import tqdm
 from openai import OpenAI
-
-"""
-json_file_path = r"C:\Users\Porthos_Jiale_Fu\OneDrive - University of Dundee\Research\2025_01\Grounding_Dino_NLP_Enhance\Record_Analyse\record_of_test_20250310_115024.json"
-original_json_file_path = r"C:\Users\Porthos_Jiale_Fu\OneDrive - University of Dundee\Research\2025_01\Grounding_Dino_NLP_Enhance\Record_Analyse\MME_RealWorld.json"
-image_directory = r"E:\MME-World\yifanzhang114\MME-RealWorld"
-API_KEY = "sk-4fe420a269a14933b5cb36811878e4aa" 
-"""
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+import argparse
 
 
 
-json_file_path = os.environ.get("json_file_path")
-original_json_file_path = os.environ.get("original_json_file_path")
-image_directory = os.environ.get("image_directory")
-API_KEY = os.environ.get("API_KEY")
+# json_file_path = os.environ.get("json_file_path")
+# original_json_file_path = os.environ.get("original_json_file_path")
+# image_directory = os.environ.get("image_directory")
+# API_KEY = os.environ.get("API_KEY")
 
 
-os.environ["DASHSCOPE_API_KEY"] = API_KEY
+
+# os.environ["DASHSCOPE_API_KEY"] = API_KEY
 
 
 with open(json_file_path, 'r', encoding='utf-8') as f:
@@ -31,6 +29,8 @@ with open(json_file_path, 'r', encoding='utf-8') as f:
 with open(original_json_file_path, 'r', encoding='utf-8') as f:
     original_data = json.load(f)
 
+with open(list_of_history_dir, 'r', encoding='utf-8') as f:
+    list_of_history = json.load(f)
 
 def crop_image(image: Image.Image, max_pixels: int = 5e5) -> Image.Image:
     width, height = image.size
@@ -51,7 +51,15 @@ def save_cropped_image(image: Image.Image, filename: str):
     return file_path
 
 
-categories = ['position', 'vehicle/counting', 'Attribute_Motion_MultiPedestrians', 'Relation_Interaction_Other2Other', 'vehicle/attribute/orientation', 'color', 'Prediction_Intention_Pedestrian', 'Relation_Interaction_Ego2Pedestrain', 'count', 'vehicle/location', 'Attribute_Motion_MultiVehicles', 'Objects_Identify', 'Person/counting', 'person/counting', 'Object_Count', 'vehicle/attribute/color', 'Attribute_Motion_Pedestrain', 'Attention_TrafficSignal', 'Prediction_Intention_Ego', 'Attribute_Visual_TrafficSignal', 'person/attribute/color', 'calculate', 'property', 'Vehicle/counting', 'person/attribute/orientation', 'Relation_Interaction_Ego2Vehicle', 'Prediction_Intention_Vehicle', 'Relation_Interaction_Ego2TrafficSignal', 'Attribute_Motion_Vehicle', 'intention']
+categories = []
+for entry in data:
+    category = entry[3]
+    if category not in categories:
+        categories.append(category)
+
+print(categories)
+
+# categories = ['position', 'vehicle/counting', 'Attribute_Motion_MultiPedestrians', 'Relation_Interaction_Other2Other', 'vehicle/attribute/orientation', 'color', 'Prediction_Intention_Pedestrian', 'Relation_Interaction_Ego2Pedestrain', 'count', 'vehicle/location', 'Attribute_Motion_MultiVehicles', 'Objects_Identify', 'Person/counting', 'person/counting', 'Object_Count', 'vehicle/attribute/color', 'Attribute_Motion_Pedestrain', 'Attention_TrafficSignal', 'Prediction_Intention_Ego', 'Attribute_Visual_TrafficSignal', 'person/attribute/color', 'calculate', 'property', 'Vehicle/counting', 'person/attribute/orientation', 'Relation_Interaction_Ego2Vehicle', 'Prediction_Intention_Vehicle', 'Relation_Interaction_Ego2TrafficSignal', 'Attribute_Motion_Vehicle', 'intention']
 ans_ac_1 = {category: 0 for category in categories}
 ans_wa_1 = {category: 0 for category in categories}
 ans_ac_2 = {category: 0 for category in categories}
@@ -222,6 +230,9 @@ def get_qwen_response(item, file_path_1, file_path_2, file_path_3, image2_bbox, 
       judge_1 = "WA"
   return response_1, judge_1
 
+async def async_get_qwen_response(executor, *args):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(executor, get_qwen_response, *args)
 
 def position_cue_qwen(sentence, w = 1.00, h = 1.00):
     expected_positions = ["right edge", "left edge", "top edge", "bottom edge", "right", "left", "top", "bottom", "bottom right corner", "bottom left corner", "top left corner", "top right corner", "lower right corner", "lower left corner", "upper left corner", "upper right corner", "bottom right", "bottom left", "top left", "top right", "lower right", "lower left", "upper left", "upper right", "central", "middle", "middle right", "middle left", "upper middle", "lower middle", "top middle", "bottom middle", "full frame"]
@@ -320,125 +331,179 @@ def remove_position_cue_qwen(sentence):
     sentence = completion.choices[0].message.content
     print(sentence)
   return sentence
+async def main():
+  executor = ThreadPoolExecutor()
+  random.shuffle(data)
+
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--json_file_path", type=str, required=True)
+  parser.add_argument("--original_json_file_path", type=str, required=True)
+  parser.add_argument("--image_directory", type=str, required=True)
+  parser.add_argument("--list_of_history_dir", type=str, required=True)
+  parser.add_argument("--API_KEY", type=str, required=True)
 
 
-random.shuffle(data)
-for entry in data:
-    image_id = entry[0]
-    image_file = None
-    question = None
-    choises = None
-    ground_truth = None
-    matched_json_data = None
-    for json_data in original_data:
-        id = json_data.get("Question_id")
+  args = parser.parse_args()
+  print(args)
 
-        # if id.rsplit('/', 1)[-1] == image_id.rsplit('/', 1)[-1]:
-        if id == image_id:
-            matched_json_data = json_data
-            image = json_data.get("Image")
-            choises = json_data.get("Answer choices")
-            category = json_data.get("Category")
-            image_file = os.path.join(image_directory, image)
-            question = json_data.get("Text")
-            ground_truth = json_data.get("Ground truth")
-            break
+  json_file_path = args.json_file_path
+  original_json_file_path = args.original_json_file_path
+  image_directory = args.image_directory
+  list_of_history_dir = args.list_of_history_dir
+  API_KEY = args.API_KEY
+
+  print("json_file_path: ", json_file_path)
+  print("original_json_file_path: ", original_json_file_path)
+  print("image_directory: ", image_directory)
+  print("list_of_history_dir: ", list_of_history_dir)
+  print("API_KEY: ", API_KEY)
+
+  for entry in tqdm(data, desc="Processing entries", unit="entry"):    
+      image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4 = None, None, None, None, None, None, None, None, None, None, None, None
+      image_id = entry[0]
+      flag = False
+      for history in list_of_history:
+        history_id = history[0]
+        if image_id == history_id:
+          print(history)
+          flag = True
+          image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4 = history
+          break
+      if flag == False:
+        image_file = None
+        question = None
+        choises = None
+        ground_truth = None
+        matched_json_data = None
+        for json_data in original_data:
+            id = json_data.get("Question_id")
+            # if id.rsplit('/', 1)[-1] == image_id.rsplit('/', 1)[-1]:
+            if id == image_id:
+                print("found id: ", id)
+                matched_json_data = json_data
+                image = json_data.get("Image")
+                choises = json_data.get("Answer choices")
+                category_in_json = json_data.get("Category")
+                image_file = os.path.join(image_directory, image)
+                question = json_data.get("Text")
+                ground_truth = json_data.get("Ground truth")
+                break
+            else:
+              pass
+                # print(id.rsplit('/', 1)[-1], image_id.rsplit('/', 1)[-1])
+        if category_in_json in categories:
+          pass
         else:
-           pass
-            # print(id.rsplit('/', 1)[-1], image_id.rsplit('/', 1)[-1])
-    if category in categories:
-      pass
-    else:
-      continue
-    if os.path.exists(image_file):
-        print("Detected: ", image_file)
-        image = Image.open(image_file)
-        # draw = ImageDraw.Draw(image)
+          print(category_in_json, "is not in categories")
+          continue
+        if os.path.exists(image_file):
+            print("Detected: ", image_file)
+            image = Image.open(image_file)
+            # draw = ImageDraw.Draw(image)
 
-        image2_bbox = entry[4]  # image2_bbox
-        image3_bbox = entry[5]  # image3_bbox
-
-        
-        image = Image.open(image_file)
-
-
-        # rect1 = patches.Rectangle((image2_bbox[0], image2_bbox[1]), 
-        #                         image2_bbox[2] - image2_bbox[0], 
-        #                         image2_bbox[3] - image2_bbox[1], 
-        #                         linewidth=2, edgecolor='red', facecolor='none')
-        # rect2 = patches.Rectangle((image3_bbox[0], image3_bbox[1]), 
-        #                         image3_bbox[2] - image3_bbox[0], 
-        #                         image3_bbox[3] - image3_bbox[1], 
-        #                         linewidth=2, edgecolor='blue', facecolor='none')
-        # fig, ax = plt.subplots(1)
-        # ax.imshow(image)
-        # ax.add_patch(rect1)
-        # ax.add_patch(rect2)
-        # plt.title(question + "\n" + choises[0] + "\n" + choises[1] + "\n" + choises[2] + "\n" + choises[3] + "\n" + choises[4] + ground_truth)
-        # plt.show()
-        
-
-        image2_ori = Image.open(image_file).crop(image2_bbox).convert('RGB')
-        image3_ori = Image.open(image_file).crop(image3_bbox).convert('RGB')
-        reasked_question = remove_position_cue_qwen(question)
-        
-        print("image2: ", image2_bbox)
-        print("image3: ", image3_bbox)
-        
-        image2_bbox_01 = [image2_bbox[0] * 1.00 / image.width, image2_bbox[1] * 1.00 / image.height, image2_bbox[2] * 1.00 / image.width, image2_bbox[3] * 1.00 / image.height]
-        image3_bbox_01 = [image3_bbox[0] * 1.00 / image.width, image3_bbox[1] * 1.00 / image.height, image3_bbox[2] * 1.00 / image.width, image3_bbox[3] * 1.00 / image.height]
-
-
-        resized_image_1 = crop_image(image)
-        file_path_1 = save_cropped_image(resized_image_1, 'resized_image_1.jpg')
-
-        resized_image_2 = crop_image(image2_ori)
-        file_path_2 = save_cropped_image(resized_image_2, 'resized_image_2.jpg')
-
-        resized_image_3 = crop_image(image3_ori)
-        file_path_3 = save_cropped_image(resized_image_3, 'resized_image_3.jpg')
-
-        response_1, judge_1 = get_qwen_response(matched_json_data, file_path_1, None, None, None, None, question, None)
-        # response_1, judge_1 = "Z", "WA"
-        if "AC" in judge_1:
-            ans_ac_1[category] += 1
-        else:
-            ans_wa_1[category] += 1
-
-        response_2, judge_2 = get_qwen_response(matched_json_data, file_path_1, None, file_path_3, None, image3_bbox_01, question, reasked_question)
-        # response_2, judge_2 = "Z", "WA"
-        if "AC" in judge_2:
-            ans_ac_2[category] += 1
-        else:
-            ans_wa_2[category] += 1
-
-        response_3, judge_3 = get_qwen_response(matched_json_data, file_path_1, file_path_2, None, image2_bbox_01, None, question, reasked_question)
-        # response_3, judge_3 = "Z", "WA"
-        if "AC" in judge_3:
-            ans_ac_3[category] += 1
-        else:
-            ans_wa_3[category] += 1
+            image2_bbox = entry[4]  # image2_bbox
+            image3_bbox = entry[5]  # image3_bbox
 
             
-        response_4, judge_4 = get_qwen_response(matched_json_data, file_path_1, file_path_2, file_path_3, image2_bbox_01, image3_bbox_01, question, reasked_question)
-        # response_3, judge_3 = "Z", "WA"
-        if "AC" in judge_4:
-            ans_ac_4[category] += 1
-        else:
-            ans_wa_4[category] += 1
-    print("Situation_1: ", response_1, judge_1)
-    print("Situation_2: ", response_2, judge_2)
-    print("Situation_3: ", response_3, judge_3)
-    print("Situation_4: ", response_4, judge_4)
-    # if "WA" in judge_1 and "AC" in judge_2 and "WA" in judge_3:
-    #   print("GET:                                                                              ", image_id)
-    for category in categories:
-        print("-------- Category: ", category, "--------")
-        print("Situation_1, AC: ", ans_ac_1[category], "WA: ", ans_wa_1[category], "TOT: ", ans_ac_1[category] + ans_wa_1[category])
-        print("Situation_2, AC: ", ans_ac_2[category], "WA: ", ans_wa_2[category], "TOT: ", ans_ac_2[category] + ans_wa_2[category])
-        print("Situation_3, AC: ", ans_ac_3[category], "WA: ", ans_wa_3[category], "TOT: ", ans_ac_3[category] + ans_wa_3[category])
-        print("Situation_4, AC: ", ans_ac_4[category], "WA: ", ans_wa_4[category], "TOT: ", ans_ac_4[category] + ans_wa_4[category])
-    # print(entry[2], ac1, ac2, ac3)
-        
-    # else:
-    #     print(f"Image file not found: {image_file}")"
+            image = Image.open(image_file)
+
+
+            # rect1 = patches.Rectangle((image2_bbox[0], image2_bbox[1]), 
+            #                         image2_bbox[2] - image2_bbox[0], 
+            #                         image2_bbox[3] - image2_bbox[1], 
+            #                         linewidth=2, edgecolor='red', facecolor='none')
+            # rect2 = patches.Rectangle((image3_bbox[0], image3_bbox[1]), 
+            #                         image3_bbox[2] - image3_bbox[0], 
+            #                         image3_bbox[3] - image3_bbox[1], 
+            #                         linewidth=2, edgecolor='blue', facecolor='none')
+            # fig, ax = plt.subplots(1)
+            # ax.imshow(image)
+            # ax.add_patch(rect1)
+            # ax.add_patch(rect2)
+            # plt.title(question + "\n" + choises[0] + "\n" + choises[1] + "\n" + choises[2] + "\n" + choises[3] + "\n" + choises[4] + ground_truth)
+            # plt.show()
+            
+
+            image2_ori = Image.open(image_file).crop(image2_bbox).convert('RGB')
+            image3_ori = Image.open(image_file).crop(image3_bbox).convert('RGB')
+            reasked_question = remove_position_cue_qwen(question)
+            
+            print("image2: ", image2_bbox)
+            print("image3: ", image3_bbox)
+            
+            image2_bbox_01 = [image2_bbox[0] * 1.00 / image.width, image2_bbox[1] * 1.00 / image.height, image2_bbox[2] * 1.00 / image.width, image2_bbox[3] * 1.00 / image.height]
+            image3_bbox_01 = [image3_bbox[0] * 1.00 / image.width, image3_bbox[1] * 1.00 / image.height, image3_bbox[2] * 1.00 / image.width, image3_bbox[3] * 1.00 / image.height]
+
+
+            resized_image_1 = crop_image(image)
+            file_path_1 = save_cropped_image(resized_image_1, 'resized_image_1.jpg')
+
+            resized_image_2 = crop_image(image2_ori)
+            file_path_2 = save_cropped_image(resized_image_2, 'resized_image_2.jpg')
+
+            resized_image_3 = crop_image(image3_ori)
+            file_path_3 = save_cropped_image(resized_image_3, 'resized_image_3.jpg')
+
+
+            tasks = [
+                async_get_qwen_response(executor, matched_json_data, file_path_1, None, None, None, None, question, None),
+                async_get_qwen_response(executor, matched_json_data, file_path_1, None, file_path_3, None, image3_bbox_01, question, reasked_question),
+                async_get_qwen_response(executor, matched_json_data, file_path_1, file_path_2, None, image2_bbox_01, None, question, reasked_question),
+                async_get_qwen_response(executor, matched_json_data, file_path_1, file_path_2, file_path_3, image2_bbox_01, image3_bbox_01, question, reasked_question),
+            ]
+
+            # 等待所有任务完成
+            results = await asyncio.gather(*tasks)
+
+            # 解析结果
+            response_1, judge_1 = results[0]
+            response_2, judge_2 = results[1]
+            response_3, judge_3 = results[2]
+            response_4, judge_4 = results[3]
+            # response_1, judge_1 = get_qwen_response(matched_json_data, file_path_1, None, None, None, None, question, None)
+            # response_2, judge_2 = get_qwen_response(matched_json_data, file_path_1, None, file_path_3, None, image3_bbox_01, question, reasked_question)
+            # response_3, judge_3 = get_qwen_response(matched_json_data, file_path_1, file_path_2, None, image2_bbox_01, None, question, reasked_question)
+            # response_4, judge_4 = get_qwen_response(matched_json_data, file_path_1, file_path_2, file_path_3, image2_bbox_01, image3_bbox_01, question, reasked_question)
+
+      # response_1, judge_1 = "Z", "WA"
+      if "AC" in judge_1:
+          ans_ac_1[category_in_json] += 1
+      else:
+          ans_wa_1[category_in_json] += 1
+      # response_2, judge_2 = "Z", "WA"
+      if "AC" in judge_2:
+          ans_ac_2[category_in_json] += 1
+      else:
+          ans_wa_2[category_in_json] += 1
+      # response_3, judge_3 = "Z", "WA"
+      if "AC" in judge_3:
+          ans_ac_3[category_in_json] += 1
+      else:
+          ans_wa_3[category_in_json] += 1
+      # response_3, judge_3 = "Z", "WA"
+      if "AC" in judge_4:
+          ans_ac_4[category_in_json] += 1
+      else:
+          ans_wa_4[category_in_json] += 1
+      print("Situation_1: ", response_1, judge_1)
+      print("Situation_2: ", response_2, judge_2)
+      print("Situation_3: ", response_3, judge_3)
+      print("Situation_4: ", response_4, judge_4)
+      # if "WA" in judge_1 and "AC" in judge_2 and "WA" in judge_3:
+      #   print("GET:                                                                              ", image_id)
+      for category in categories:
+          print("-------- Category: ", category, "--------")
+          print("Situation_1, AC: ", ans_ac_1[category], "WA: ", ans_wa_1[category], "TOT: ", ans_ac_1[category] + ans_wa_1[category])
+          print("Situation_2, AC: ", ans_ac_2[category], "WA: ", ans_wa_2[category], "TOT: ", ans_ac_2[category] + ans_wa_2[category])
+          print("Situation_3, AC: ", ans_ac_3[category], "WA: ", ans_wa_3[category], "TOT: ", ans_ac_3[category] + ans_wa_3[category])
+          print("Situation_4, AC: ", ans_ac_4[category], "WA: ", ans_wa_4[category], "TOT: ", ans_ac_4[category] + ans_wa_4[category])
+      # print(entry[2], ac1, ac2, ac3)
+          
+      # else:
+      #     print(f"Image file not found: {image_file}")"
+      list_of_history.append([image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4])
+      # dump list_of_history to .json file
+      with open(list_of_history_dir, 'w') as f:
+        json.dump(list_of_history, f)
+
+asyncio.run(main())
