@@ -661,14 +661,14 @@ def main():
     for json_data in temp_questions_box:
       if json_data.get("Category") == category and cnt_existed +1 <= 5:
         image_path = os.path.join(HOME, json_data.get("Image"))
-        
+        cnt_existed += 1
         if os.path.exists(image_path):
           existed_questions_box.append(json_data)
 
 
 
   timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-  filename = f'record_of_test_{timestamp}.json'
+  filename = f'record_of_test.json'
 
   for json_data in tqdm(existed_questions_box, desc="Processing questions", unit="question"):
     image_path = os.path.join(HOME, json_data.get("Image"))
