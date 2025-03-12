@@ -571,11 +571,11 @@ def main():
 
   print(args)
 
-  WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH")
-  json_dir = os.environ.get("json_dir")
-  CONFIG_PATH = os.environ.get("CONFIG_PATH")
-  HOME = os.environ.get("HOME")
-  API_KEY = os.environ.get("API_KEY")
+  WEIGHTS_PATH = args.WEIGHTS_PATH
+  json_dir = args.json_dir
+  CONFIG_PATH = args.CONFIG_PATH
+  HOME = args.HOME
+  API_KEY = args.API_KEY
 
   print("WEIGHTS_PATH: ", WEIGHTS_PATH)
   print("json_dir: ", json_dir)
