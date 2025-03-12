@@ -22,7 +22,6 @@ from datetime import datetime
 from openai import APIConnectionError
 from tqdm import tqdm
 from openai import OpenAI
-
 import argparse
 
 # HOME = os.getcwd()
@@ -40,17 +39,6 @@ CUDA_VISIBLE_DEVICES=5 HF_ENDPOINT=https://hf-mirror.com \
 
 """
 
-WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH")
-json_dir = os.environ.get("json_dir")
-CONFIG_PATH = os.environ.get("CONFIG_PATH")
-HOME = os.environ.get("HOME")
-API_KEY = os.environ.get("API_KEY")
-
-print("WEIGHTS_PATH: ", WEIGHTS_PATH)
-print("json_dir: ", json_dir)
-print("CONFIG_PATH: ", CONFIG_PATH)
-print("HOME: ", HOME)
-print("API_KEY: ", API_KEY)
 
 
 # WEIGHTS_PATH = "/home/fujl/Grounding_Dino_Test/GroundingDINO/weights/groundingdino_swint_ogc.pth"
@@ -583,6 +571,18 @@ def main():
 
   print(args)
 
+  WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH")
+  json_dir = os.environ.get("json_dir")
+  CONFIG_PATH = os.environ.get("CONFIG_PATH")
+  HOME = os.environ.get("HOME")
+  API_KEY = os.environ.get("API_KEY")
+
+  print("WEIGHTS_PATH: ", WEIGHTS_PATH)
+  print("json_dir: ", json_dir)
+  print("CONFIG_PATH: ", CONFIG_PATH)
+  print("HOME: ", HOME)
+  print("API_KEY: ", API_KEY)
+  
   model = load_model(CONFIG_PATH, WEIGHTS_PATH)
   device = torch.device("cpu")
   model = model.to(device)
