@@ -213,7 +213,7 @@ def get_sub_patches_by_random_cropping(current_patch_bbox, suffix, heatmap): # u
       x1, x2 = x2, x1
     if y1 > y2:
       y1, y2 = y2, y1
-    if abs((y2-y1) * (x2-x1)) > 0.1*(500*500) and abs((y2-y1) * (x2-x1)) <= 0.9*(500*500):
+    if abs((y2-y1) * (x2-x1)) > 0.1*(500*500):
       current_heatmap = heatmap[y1:y2, x1:x2]
       x1 = x1/500.00
       y1 = y1/500.00
@@ -659,7 +659,7 @@ def main():
     # print(category)
     cnt_existed = 0
     for json_data in temp_questions_box:
-      if json_data.get("Category") == category and cnt_existed +1 <= 5:
+      if json_data.get("Category") == category and cnt_existed +1 <= 50:
         image_path = os.path.join(HOME, json_data.get("Image"))
         cnt_existed += 1
         if os.path.exists(image_path):
