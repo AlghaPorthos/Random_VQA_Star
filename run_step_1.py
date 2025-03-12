@@ -646,13 +646,13 @@ def main():
 
   # print(temp_questions_box)
 
-  # list_of_category.append("color")
-  # list_of_category.append("count")
-  # list_of_category.append("position")
+  list_of_category.append("color")
+  list_of_category.append("count")
+  list_of_category.append("position")
 
-  for json_data in temp_questions_box:
-    if json_data.get("Category") not in list_of_category:
-      list_of_category.append(json_data.get("Category"))
+  # for json_data in temp_questions_box:
+  #   if json_data.get("Category") not in list_of_category:
+  #     list_of_category.append(json_data.get("Category"))
 
 
   for category in list_of_category:
