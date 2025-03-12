@@ -44,14 +44,20 @@ CONFIG_PATH = os.environ.get("CONFIG_PATH")
 HOME = os.environ.get("HOME")
 API_KEY = os.environ.get("API_KEY")
 
+print("WEIGHTS_PATH: ", WEIGHTS_PATH)
+print("json_dir: ", json_dir)
+print("CONFIG_PATH: ", CONFIG_PATH)
+print("HOME: ", HOME)
+print("API_KEY: ", API_KEY)
+
 
 # WEIGHTS_PATH = "/home/fujl/Grounding_Dino_Test/GroundingDINO/weights/groundingdino_swint_ogc.pth"
 # json_dir = "/home/fujl/Grounding_Dino_Test/MME-RealWorld_Part/MME_RealWorld_RS_and_AD.json"
 # CONFIG_PATH = "/home/fujl/Grounding_Dino_Test/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"
 # HOME = "/home/fujl/Grounding_Dino_Test/MME-RealWorld_Part"
 
-print(WEIGHTS_PATH, "; exist:", os.path.isfile(WEIGHTS_PATH))
-print(CONFIG_PATH, "; exist:", os.path.isfile(CONFIG_PATH))
+# print(WEIGHTS_PATH, "; exist:", os.path.isfile(WEIGHTS_PATH))
+# print(CONFIG_PATH, "; exist:", os.path.isfile(CONFIG_PATH))
 model = load_model(CONFIG_PATH, WEIGHTS_PATH)
 device = torch.device("cpu")
 model = model.to(device)
@@ -639,14 +645,29 @@ def judge_qwen_api(item, image_dir, image2_bbox, image3_bbox):
     json.dump(record_of_test, f, indent=4) 
   torch.cuda.empty_cache()
 
-for json_data in tqdm(existed_questions_box, desc="Processing questions", unit="question"):
-  image_path = os.path.join(HOME, json_data.get("Image"))
-  # print(image_path)
-  if os.path.exists(image_path):
-    print(image_path)
+def main():
+  parser = argparse.ArgumentParser()
+  parser.add_argument("--WEIGHTS_PATH", type=str, required=True)
+  parser.add_argument("--json_dir", type=str, required=True)
+  parser.add_argument("--CONFIG_PATH", type=str, required=True)
+  parser.add_argument("--HOME", type=str, required=True)
+  parser.add_argument("--API_KEY", type=str, required=True)
 
-    image = Image.open(image_path)
-    related_bbox_2, related_bbox_3 = Simple_VG(image_path, json_data.get('Text'))
-    judge_qwen_api(json_data, image_path, related_bbox_2, related_bbox_3)
-  else:
-    print("File does not exist.")
+  args = parser.parse_args()
+
+  print(args)
+
+  for json_data in tqdm(existed_questions_box, desc="Processing questions", unit="question"):
+    image_path = os.path.join(HOME, json_data.get("Image"))
+    # print(image_path)
+    if os.path.exists(image_path):
+      print(image_path)
+
+      image = Image.open(image_path)
+      related_bbox_2, related_bbox_3 = Simple_VG(image_path, json_data.get('Text'))
+      judge_qwen_api(json_data, image_path, related_bbox_2, related_bbox_3)
+    else:
+      print("File does not exist.")
+
+if __name__ == "__main__":
+    main()
