@@ -1,201 +1,61 @@
-import json
 import os
-from PIL import Image, ImageDraw
+import torch
+import torchvision
+import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import dashscope
+from queue import PriorityQueue
+from PIL import Image, UnidentifiedImageError  
+from groundingdino.util.inference import load_model, load_image, predict, annotate
+import groundingdino.datasets.transforms as T
+from IPython.display import display
+from PIL import Image
+import base64
 import random
+import json
+from torchvision import transforms
+from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+from qwen_vl_utils import process_vision_info
+import torch
+import time
+import dashscope
+from datetime import datetime
+from openai import APIConnectionError
 from tqdm import tqdm
 from openai import OpenAI
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import argparse
 
-
-
-def crop_image(image: Image.Image, max_pixels: int = 5e5) -> Image.Image:
-    width, height = image.size
-    total_pixels = width * height
-
-    if total_pixels <= max_pixels:
-        return image
-
-    ratio = (max_pixels / total_pixels) ** 0.5
-    new_width = int(width * ratio)
-    new_height = int(height * ratio)
-
-    return image.resize((new_width, new_height), Image.LANCZOS)
-
-def save_cropped_image(image: Image.Image, filename: str):
-    file_path = filename
-    image.save(file_path)
-    return file_path
-
+# HOME = os.getcwd()
+# print(HOME)
+model = None
+filename = None
 client = None
+"""
+Run with:
+CUDA_VISIBLE_DEVICES=5 HF_ENDPOINT=https://hf-mirror.com \
+  WEIGHTS_PATH = "/home/fujl/Grounding_Dino_Test/GroundingDINO/weights/groundingdino_swint_ogc.pth" \
+  json_dir = "/home/fujl/Grounding_Dino_Test/MME-RealWorld_Part/MME_RealWorld_RS_and_AD.json" \
+  CONFIG_PATH = "/home/fujl/Grounding_Dino_Test/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py" \
+  HOME = "/home/fujl/Grounding_Dino_Test/MME-RealWorld_Part" \
+  API_KEY = "sk-4fe420a269a14933b5cb36811878e4aa" \
+  python run_without_position_prompt.py
 
-def get_qwen_response(item, file_path_1, file_path_2, file_path_3, image2_bbox, image3_bbox, question = None, reasked_question = None):
-#   return "Z", "WA" 
-  global client
-  id = item["Question_id"]
-  # image = item["Image"]
-  if question is None:
-    question = item["Text"]
-  choises = item["Answer choices"]
-  ground_truth = item["Ground truth"]
-  category = item["Category"]
-  if file_path_1 is not None:
-    if file_path_2 is None and file_path_3 is None:
-      messages_1 = [
-          {
-              "role": "user",
-              "content": [
-                  {"image": file_path_1},
-                  # {"image": file_path_2},
-                  # {"image": file_path_3},
-                  {"text": f"{question} The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-              ]
-          }
-      ]
-    elif file_path_2 is None and file_path_3 is not None:
-      messages_1 = [
-          {
-              "role": "user",
-              "content": [
-                  {"image": file_path_1},
-                  # {"image": file_path_2},
-                  {"image": file_path_3},
-                  {"text": f"{question} The two images are shown, the first image is the original one, and the other is a more detailed look. The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-                #   {"text": f"{question} The two images are shown, the first image is the original one, and the other is a more detailed look, which coordinats is {image3_bbox}. The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-              ]
-          }
-      ]
-    elif file_path_2 is not None and file_path_3 is None:
-      messages_1 = [
-          {
-              "role": "user",
-              "content": [
-                  {"image": file_path_1},
-                  {"image": file_path_2},
-                  # {"image": file_path_3},
-                  {"text": f"{question} The two images are shown, the first image is the original one, and the other is a more detailed look. The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-                #   {"text": f"{question} The two images are shown, the first image is the original one, and the other is a more detailed look, which coordinate is {image2_bbox}. The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-              ]
-          }
-      ]
-    elif file_path_2 is not None and file_path_3 is not None:
-      messages_1 = [
-          {
-              "role": "user",
-              "content": [
-                  {"image": file_path_1},
-                  {"image": file_path_2},
-                  {"image": file_path_3},
-                  {"text": f"{question} The three images are shown, the first image is the original one, and the other is a more detailed look, which coordinates are {image2_bbox} and {image3_bbox}, respectively. The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-              ]
-          }
-      ]
-  else:
-    
-    if file_path_2 is None and file_path_3 is None:
-      return "Z", "WA"
-      # messages_1 = [
-      #     {
-      #         "role": "user",
-      #         "content": [
-      #             # {"image": file_path_1},
-      #             # {"image": file_path_2},
-      #             # {"image": file_path_3},
-      #             {"text": f"{question} The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-      #         ]
-      #     }
-      # ]
-    elif file_path_2 is None and file_path_3 is not None:
-      messages_1 = [
-          {
-              "role": "user",
-              "content": [
-                  # {"image": file_path_1},
-                  # {"image": file_path_2},
-                  {"image": file_path_3},
-                  {"text": f"{reasked_question} The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-              ]
-          }
-      ]
-    elif file_path_2 is not None and file_path_3 is None:
-      messages_1 = [
-          {
-              "role": "user",
-              "content": [
-                  # {"image": file_path_1},
-                  {"image": file_path_2},
-                  # {"image": file_path_3},
-                  {"text": f"{reasked_question} The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-              ]
-          }
-      ]
-    elif file_path_2 is not None and file_path_3 is not None:
-      messages_1 = [
-          {
-              "role": "user",
-              "content": [
-                  # {"image": file_path_1},
-                  {"image": file_path_2},
-                  {"image": file_path_3},
-                  {"text": f"{reasked_question} The two images are shown, the first image is the original one, and the other is a more detailed look. The choices are listed below: {choises}\n Select the best answer to the above multiple-choice question based on the image. Respond with only the letter (A, B, C, D, or E) of the correct option. The best answer is:"}
-              ]
-          }
-      ]
-  
+"""
 
-  response_1 = dashscope.MultiModalConversation.call(
-      api_key=os.getenv('DASHSCOPE_API_KEY'),
-      model='qwen-vl-max-latest',
-      messages=messages_1,
-      vl_high_resolution_images=False
-  )
-  try:
-    if response_1 is None:
-      print("API Failed")
-      return "Z", "WA"
-  except Exception as e:
-    print(f"Error: {e}")
-    return "Z", "WA"
-  try:
-    response_1 = response_1.output.choices[0].message.content[0]["text"]
-  except Exception as e:
-    print(f"Error: {e}")
-    return "Z", "WA"
-  print("Response: ",response_1)
 
-  # print(sentence)
 
-  print(response_1)
-  if ground_truth == response_1:
-    judge_1 = "AC_1"
-  # elif ground_truth in response_1:
-  #   judge_1 = "AC_2a"
-  elif response_1 in ground_truth:
-    judge_1 = "AC_2b"
-  else:
-    cor = 0
-    for ANS in ["A", "B", "C", "D"]:
-      if ANS in ground_truth and ANS in response_1:
-        cor += 1
-    if cor == 1:
-      judge_1 = "AC_3"
-    elif cor > 1:
-      judge_1 = "PE_2"
-    else:
-      judge_1 = "WA"
-  return response_1, judge_1
+# WEIGHTS_PATH = "/home/fujl/Grounding_Dino_Test/GroundingDINO/weights/groundingdino_swint_ogc.pth"
+# json_dir = "/home/fujl/Grounding_Dino_Test/MME-RealWorld_Part/MME_RealWorld_RS_and_AD.json"
+# CONFIG_PATH = "/home/fujl/Grounding_Dino_Test/GroundingDINO/groundingdino/config/GroundingDINO_SwinT_OGC.py"
+# HOME = "/home/fujl/Grounding_Dino_Test/MME-RealWorld_Part"
 
-async def async_get_qwen_response(executor, *args):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(executor, get_qwen_response, *args)
+# print(WEIGHTS_PATH, "; exist:", os.path.isfile(WEIGHTS_PATH))
+# print(CONFIG_PATH, "; exist:", os.path.isfile(CONFIG_PATH))
+
+
 
 def position_cue_qwen(sentence, w = 1.00, h = 1.00):
+    global client
     expected_positions = ["right edge", "left edge", "top edge", "bottom edge", "right", "left", "top", "bottom", "bottom right corner", "bottom left corner", "top left corner", "top right corner", "lower right corner", "lower left corner", "upper left corner", "upper right corner", "bottom right", "bottom left", "top left", "top right", "lower right", "lower left", "upper left", "upper right", "central", "middle", "middle right", "middle left", "upper middle", "lower middle", "top middle", "bottom middle", "full frame"]
-
     text_to_bbox = {
       "right edge":            ((3.00*w)/4.00, 0, w, h),
       "left edge":            (0, 0, w/4.00, h),
@@ -246,15 +106,21 @@ def position_cue_qwen(sentence, w = 1.00, h = 1.00):
         # qwen_agent.reset()
         # response = qwen_agent.step(user_msg)
 
-
-        completion = client.chat.completions.create(
-            model="qwen-plus",
-            messages=[
-                {'role': 'system', 'content': 'You will be given a question, Please give me the most related region according to the position cue the question asked. Please select from the following word WITHOUT any other word: right edge, left edge, top edge, bottom edge, right, left, top, bottom, bottom right corner, bottom left corner, top left corner, top right corner, lower right corner, lower left corner, upper left corner, upper right corner, bottom right, bottom left, top left, top right, lower right, lower left, upper left, upper right, central, middle, middle right, middle left, upper middle, lower middle, top middle, bottom middle, full frame. If there is none, use \'full frame\''},
-                {'role': 'user', 'content': sentence}],
-            )
-        response_content = completion.choices[0].message.content
-        print(response_content)
+        try:
+          completion = client.chat.completions.create(
+              model="qwen-plus",
+              messages=[
+                  {'role': 'system', 'content': 'You will be given a question, Please give me the most related region according to the position cue the question asked. Please select from the following word WITHOUT any other word: right edge, left edge, top edge, bottom edge, right, left, top, bottom, bottom right corner, bottom left corner, top left corner, top right corner, lower right corner, lower left corner, upper left corner, upper right corner, bottom right, bottom left, top left, top right, lower right, lower left, upper left, upper right, central, middle, middle right, middle left, upper middle, lower middle, top middle, bottom middle, full frame. If there is none, use \'full frame\''},
+                  {'role': 'user', 'content': sentence}],
+              )
+          response_content = completion.choices[0].message.content
+          print(response_content)
+        except APIConnectionError as e:
+            print(f"Skipped with Connection Error:  {e}")
+            return [0,0,w,h], "full frame"
+        except Exception as e:
+            print(f"Skipped with Other Error:  {e}")
+            return [0,0,w,h], "full frame"
 
         # print(response.msgs[0].content)
         if response_content in expected_positions:
@@ -271,6 +137,7 @@ def position_cue_qwen(sentence, w = 1.00, h = 1.00):
       final_bbox = [int(range_of_text_to_bbox[0]), int(range_of_text_to_bbox[1]), int(range_of_text_to_bbox[2]), int(range_of_text_to_bbox[3])]
     return final_bbox, most_similar
 
+
 def remove_position_cue_qwen(sentence):
   global client
   for i in range(1):
@@ -282,237 +149,538 @@ def remove_position_cue_qwen(sentence):
       print("Re-generating: " + str(i+1) + " of 10")
     # user_msg = "Here is a question: " + sentence + "This question has attention of " + pos_cue + " of the image. But acturally the image may be cropped in the process, so any position cue based on the whole image is invalid. Now please remove the position cue related to " + pos_cue + " based on the whole image (note that this is not paraphrasing), but keep OTHER information all the same."
 
-    completion = client.chat.completions.create(
-        model="qwen-plus",
-        messages=[
-            {'role': 'system', 'content': "You will be given a question, This question has attention of " + pos_cue + " of the image. But acturally the image may be cropped in the process, so any position cue based on the whole image is invalid. Now please remove the position cue related to " + pos_cue + " based on the whole image (note that this is not paraphrasing), but keep OTHER information all the same."},
-            {'role': 'user', 'content': sentence}],
-        )
-    sentence = completion.choices[0].message.content
+    # completion = client.chat.completions.create(
+    #     model="qwen-plus",
+    #     messages=[
+    #         {'role': 'system', 'content': "You will be given a question, This question has attention of " + pos_cue + " of the image. But acturally the image may be cropped in the process, so any position cue based on the whole image is invalid. Now please remove the position cue related to " + pos_cue + " based on the whole image (note that this is not paraphrasing), but keep OTHER information all the same."},
+    #         {'role': 'user', 'content': sentence}],
+    #     )
+    # # 获取助手的回复内容
+    # sentence = completion.choices[0].message.content
+
+    try:
+      completion = client.chat.completions.create(
+          model="qwen-plus",
+          messages=[
+              {'role': 'system', 'content': "You will be given a question, This question has attention of " + pos_cue + " of the image. But acturally the image may be cropped in the process, so any position cue based on the whole image is invalid. Now please remove the position cue related to " + pos_cue + " based on the whole image (note that this is not paraphrasing), but keep OTHER information all the same."},
+              {'role': 'user', 'content': sentence}],
+          )
+      # 获取助手的回复内容
+      sentence = completion.choices[0].message.content
+      print(sentence)
+    except APIConnectionError as e:
+        print(f"连接错误: {e}")
+        # 可以选择重试或返回默认值
+        return sentence
+    except Exception as e:
+        print(f"发生错误: {e}")
+        return sentence
     print(sentence)
   return sentence
-async def main():
-  executor = ThreadPoolExecutor()
-  global client
+
+
+def calculate_iou(box1, box2):
+    # box1 and box2 are both in xyxy format
+    x1_intersection = max(box1[0], box2[0])
+    y1_intersection = max(box1[1], box2[1])
+    x2_intersection = min(box1[2], box2[2])
+    y2_intersection = min(box1[3], box2[3])
+
+    intersection_width = max(0, x2_intersection - x1_intersection)
+    intersection_height = max(0, y2_intersection - y1_intersection)
+    intersection_area = intersection_width * intersection_height
+
+    box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
+    box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
+
+    union_area = box1_area + box2_area - intersection_area
+
+    iou = intersection_area / union_area if union_area > 0 else 0.0
+
+    return iou
+def get_sub_patches_by_random_cropping(current_patch_bbox, suffix, heatmap): # used as part of A*
+  x1, y1, x2, y2 = current_patch_bbox
+  x0, y0 = x1, y1
+  w = x2 - x1
+  h = y2 - y1
+  bboxes = []
+  for _ in range(1000):
+    x1 = np.random.randint(0, 50) * 10 + 5
+    y1 = np.random.randint(0, 50) * 10 + 5
+    x2 = np.random.randint(0, 50) * 10 + 5
+    y2 = np.random.randint(0, 50) * 10 + 5
+    if x1 > x2:
+      x1, x2 = x2, x1
+    if y1 > y2:
+      y1, y2 = y2, y1
+    if abs((y2-y1) * (x2-x1)) > 0.1*(500*500) and abs((y2-y1) * (x2-x1)) <= 0.9*(500*500):
+      current_heatmap = heatmap[y1:y2, x1:x2]
+      x1 = x1/500.00
+      y1 = y1/500.00
+      x2 = x2/500.00
+      y2 = y2/500.00
+      extended = extend_bbox([x1, y1, x2, y2])
+      x1, y1, x2, y2 = extended
+      x1 = int(x1*w)
+      y1 = int(y1*h)
+      x2 = int(x2*w)
+      y2 = int(y2*h)
+      bboxes.append([[x1 + x0, y1 + y0, x2 + x0, y2 + y0], current_heatmap.mean() + (np.log10(y2-y1) + np.log10(x2-x1))/5])
+  bboxes = sorted(bboxes, key=lambda x: x[1], reverse=True)
+  # print("--------Printing get_sub_patches_by_random_cropping --------")
+  # for i in range(5):
+  #   print(bboxes[i])
+  # print("------------------------------------------------------------")
+  crop_coords = []
+  cnt_bbox = 0
+  for i in range(len(bboxes)):
+    flag = True
+    for j in range(i):
+      # print(i, j, calculate_iou(bboxes[i][0], bboxes[j][0]))
+      if(calculate_iou(bboxes[i][0], bboxes[j][0]) > 0.8): # which means that the two boxes are too close
+        flag = False
+         
+        
+    if flag == True:
+      crop_coords.append((suffix + str(cnt_bbox), bboxes[i][0]))
+      cnt_bbox += 1
+    if cnt_bbox == 6:
+      break
+  # print("--------Printing get_sub_patches_by_random_cropping --------")
+  # for crop_coord in crop_coords:
+  #   print(crop_coord)
+  # print("------------------------------------------------------------")
+  return crop_coords # for suffix, start, end in crop_coords:
+
+def extend_bbox(bbox):
+    x1, y1, x2, y2 = bbox  # in xyxy format, and all values are in range of (0,1)
+
+    center_x = (x1 + x2) / 2.00
+    center_y = (y1 + y2) / 2.00
+
+    width = x2 - x1
+    height = y2 - y1
+
+    new_width = width * 2
+    new_height = height * 2
+
+    new_x1 = center_x - new_width / 2
+    new_y1 = center_y - new_height / 2
+    new_x2 = center_x + new_width / 2
+    new_y2 = center_y + new_height / 2
+    new_x1 = max(0.0, new_x1)
+    new_y1 = max(0.0, new_y1)
+    new_x2 = min(1.0, new_x2)
+    new_y2 = min(1.0, new_y2)
+
+    return [new_x1, new_y1, new_x2, new_y2]
+
+
+def get_judge_heatmap(image, text_prompt, bbox, boxes, logits, phrases):
+  BOX_TRESHOLD = 0.25
+  TEXT_TRESHOLD = 0.2
+  image = image.crop(bbox)
+  transform = T.Compose(
+      [
+          T.RandomResize([800], max_size=1333),
+          T.ToTensor(),
+          T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+      ]
+  )
   
 
-  with open(json_file_path, 'r', encoding='utf-8') as f:
-      data = json.load(f)
+  image_source = image.convert("RGB")
+  image_np = np.asarray(image_source)
+  image_transformed_np, _ = transform(image_source, None)
 
-  with open(original_json_file_path, 'r', encoding='utf-8') as f:
-      original_data = json.load(f)
+  heatmap = np.zeros((500, 500))
+  np_width = 500
+  np_height = 500
+  for i in range(len(boxes)-1, -1, -1):  # in reversed order, so the bbox with larger index will be drawn on top
+    # print(boxes[i])
+    x_center, y_center, width, height = boxes[i].tolist()
+    x_min = int((x_center - width / 2) * 500)
+    y_min = int((y_center - height / 2) * 500)
+    x_max = int((x_center + width / 2) * 500)
+    y_max = int((y_center + height / 2) * 500)
+    # print(x_min, y_min, x_max, y_max)
+    bbox_i_01 = extend_bbox([x_min*1.00/np_width, y_min*1.00/np_height, x_max*1.00/np_width, y_max*1.00/np_height])
+    x_min, y_min, x_max, y_max = bbox_i_01
+    x_min = int(x_min * np_width)
+    y_min = int(y_min * np_height)
+    x_max = int(x_max * np_width)
+    y_max = int(y_max * np_height)
+    # bbox_xyxy = (x_min, y_min, x_max, y_max)
+    # print("get_judge_heatmap: ",bbox_i_01, bbox_xyxy, ": ", logits[i], phrases[i])
+    # print(bbox_xyxy, logits[i], phrases[i])
+    heatmap[y_min:y_max,x_min:x_max] = float(logits[i])
 
-  with open(list_of_history_dir, 'r', encoding='utf-8') as f:
-      list_of_history = json.load(f)
+  return heatmap
 
 
-  random.shuffle(data)
+def get_judge_value_without_noun_list(image, text_prompt, bbox):
+  global model
+  image = image.crop(bbox)
 
+  transform = T.Compose(
+      [
+          T.RandomResize([800], max_size=1333),
+          T.ToTensor(),
+          T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+      ]
+  )
+
+  image_source = image.convert("RGB")
+  image_np = np.asarray(image_source)
+  image_transformed_np, _ = transform(image_source, None)
+
+  BOX_TRESHOLD = 0.25
+  TEXT_TRESHOLD = 0.2
+
+  boxes, logits, phrases = predict(
+      model=model,
+      image=image_transformed_np,
+      caption=text_prompt,
+      box_threshold=BOX_TRESHOLD,
+      text_threshold=TEXT_TRESHOLD
+  )
+  heatmap_returned = get_judge_heatmap(image, text_prompt, bbox, boxes, logits, phrases)
+  return heatmap_returned, heatmap_returned.max()*10+heatmap_returned.mean() # + (np.log10(bbox[2] - bbox[0]) + np.log10(bbox[3] - bbox[1]))*0.50
+
+
+class Prioritize: # class from penghao-wu/vstar
+	def __init__(self, priority, item):
+		self.priority = priority
+		self.item = item
+
+	def __eq__(self, other):
+		return self.priority == other.priority
+
+	def __lt__(self, other):
+		return self.priority < other.priority
+
+
+def remove_substrings(input_list):
+    unique_list = []
+
+    for i in range(len(input_list)):
+        is_substring = False
+        for j in range(len(input_list)):
+            if input_list[j] in input_list[i] and not (input_list[i] == input_list[j]):
+                is_substring = True
+                break
+        if not is_substring:
+            unique_list.append(input_list[i])
+
+    final_list = []
+    for item in unique_list:
+        if not any(item in existing for existing in final_list):
+            final_list.append(item)
+
+    return final_list
+
+
+def Simple_VG(image_dir, question, min_res = 1500):
+  print(image_dir)
+  print(question)
+  image = Image.open(image_dir)
+  
+  related_bbox, pos_cue = position_cue_qwen(question, image.width, image.height)
+  related_bbox_2 = related_bbox
+
+  question_without_pos = remove_position_cue_qwen(question)
+  print(f"question_without_pos: {question_without_pos}")
+  queue = PriorityQueue()
+  transform = T.Compose(
+    [
+      T.RandomResize([800], max_size=1333),
+      T.ToTensor(),
+      T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+    ]
+  )
+
+  # image_source = image.convert("RGB")
+  # image_np = np.asarray(image_source)
+  # image_transformed_np, _ = transform(image_source, None)
+
+  # _, _, all_phrases = predict(
+  #     model=model,
+  #     image=image_transformed_np,
+  #     caption=question,
+  #     box_threshold=0.1,
+  #     text_threshold=0.1
+  # )
+  # all_phrases = remove_substrings(all_phrases)
+  # unsorted_noun_list = []
+
+  # for noun in all_phrases:
+  #   if noun in unsorted_noun_list:
+  #     pass
+  #   else:
+  #     unsorted_noun_list.append(noun)
+
+  # most_related_noun = find_most_related_obj(question, unsorted_noun_list)
+
+  # noun_list = [most_related_noun]
+
+  # for noun in all_phrases:
+  #   if noun in noun_list:
+  #     pass
+  #   else:
+  #     noun_list.append(noun)
+
+  # print("-------------------------")
+  # print("noun_list: ", noun_list)
+  # print("most_related_noun: ", most_related_noun)
+  # print("-------------------------")
+
+  init_patch = dict()
+  init_patch['bbox'] = related_bbox
+  init_patch['suffix'] = "_"
+  # init_patch['priority_score'] = 1
+  # init_patch['priority_score'] = get_judge_value(image, question, init_patch['bbox'], noun_list)
+  init_patch['heatmap'], init_patch['priority_score'] = get_judge_value_without_noun_list(image, question, init_patch['bbox'])
+
+
+  cnt_item_queue = 0
+  queue.put(Prioritize(-init_patch['priority_score'], init_patch))
+  # print("queue.empty():", queue.empty())
+  max_patch = init_patch
+  history_bbox = []
+  while(not queue.empty()): # the main loop of A_star searching
+    patch_chosen = queue.get().item
+    cnt_item_queue += 1
+    current_bbox = patch_chosen['bbox']
+    current_suffix = patch_chosen['suffix']
+    current_heatmap = patch_chosen['heatmap']
+    current_priority = patch_chosen['priority_score']
+    if current_bbox in history_bbox:
+      print(f"SKIPPED :: current_suffix: {current_suffix}, ccurrent_bbox: {current_bbox}")
+      continue
+    else:
+      history_bbox.append(current_bbox)
+
+    if current_priority > max_patch['priority_score']:
+      max_patch = patch_chosen
+
+    print(f"current_suffix: {current_suffix}, current priority: {current_priority}, max pri score: {max_patch['priority_score']}, ccurrent_bbox: {current_bbox}")
+
+    if 2 * (current_priority) < max_patch['priority_score'] or cnt_item_queue > 20:
+      break
+    # crop_coords = get_sub_patches(current_bbox, current_suffix)
+    crop_coords = get_sub_patches_by_random_cropping(current_bbox, current_suffix, current_heatmap)
+
+    # print(crop_coords)
+
+    if max(current_bbox[2] - current_bbox[0], current_bbox[3] - current_bbox[1]) >= min_res:
+      for clip_suffix, clip_bbox in crop_coords:
+        clip_patch = dict()
+        clip_patch['bbox'] = clip_bbox
+        clip_patch['suffix'] = clip_suffix
+        
+        clip_patch['heatmap'], clip_patch['priority_score'] = get_judge_value_without_noun_list(image, question, clip_bbox)
+        queue.put(Prioritize(-clip_patch['priority_score'], clip_patch))
+  return related_bbox_2, max_patch['bbox']
+
+ans_tot = 0
+ans_ac = 0
+ans_wa = 0
+ans_uke = 0
+
+
+# def encode_image(image):
+#     # Create a BytesIO object to hold the image in memory
+#     buffered = io.BytesIO()
+#     # Save the image as JPEG (or PNG) to the BytesIO object
+#     image.save(buffered, format="JPEG")  # Change format as needed
+#     # Get the byte data and encode it to base64
+#     return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+
+def crop_image(image: Image.Image, max_pixels: int = 1e5) -> Image.Image:
+    width, height = image.size
+    total_pixels = width * height
+
+    if total_pixels <= max_pixels:
+        return image
+
+    ratio = (max_pixels / total_pixels) ** 0.5
+    new_width = int(width * ratio)
+    new_height = int(height * ratio)
+
+    return image.resize((new_width, new_height), Image.LANCZOS)
+
+def save_cropped_image(image: Image.Image, filename: str):
+    file_path = filename
+    image.save(file_path)
+    return file_path
+
+record_of_test = []
+
+def judge_qwen_api(item, image_dir, image2_bbox, image3_bbox):
+  global record_of_test
+  global filename 
+  print("item: ", item)
+  print("image_dir: ", image_dir)
+  print("image2_bbox: ", image2_bbox)
+  print("image3_bbox: ", image3_bbox)
+
+  id = item["Question_id"]
+  # image = item["Image"]
+  question = item["Text"]
+  choises = item["Answer choices"]
+  ground_truth = item["Ground truth"]
+  category = item["Category"]
+
+  image = Image.open(image_dir).convert('RGB')
+  
+  related_bbox, pos_cue = position_cue_qwen(question, image.width, image.height)
+
+
+  image3_bbox = [(image3_bbox[0]*2 + image2_bbox[0])//3, (image3_bbox[1]*2 + image2_bbox[1])//3, (image3_bbox[2]*2 + image2_bbox[2])//3, (image3_bbox[3]*2 + image2_bbox[3])//3] # Extend the bounding box by 1/3 in each direction
+
+  # image2_bbox_01 = [image2_bbox[0] * 1.00 / image.width, image2_bbox[1] * 1.00 / image.height, image2_bbox[2] * 1.00 / image.width, image2_bbox[3] * 1.00 / image.height]
+  # image3_bbox_01 = [image3_bbox[0] * 1.00 / image.width, image3_bbox[1] * 1.00 / image.height, image3_bbox[2] * 1.00 / image.width, image3_bbox[3] * 1.00 / image.height]
+
+  # image2_ori = Image.open(image_dir).crop(image2_bbox).convert('RGB')
+  # image3_ori = Image.open(image_dir).crop(image3_bbox).convert('RGB')
+  # reasked_question = remove_position_cue_qwen(question)
+  
+  print("image2: ", image2_bbox)
+  print("image3: ", image3_bbox)
+  
+
+  # resized_image_1 = crop_image(image)
+  # file_path_1 = save_cropped_image(resized_image_1, 'resized_image_1.jpg')
+
+  # resized_image_2 = crop_image(image2_ori)
+  # file_path_2 = save_cropped_image(resized_image_2, 'resized_image_2.jpg')
+
+  # resized_image_3 = crop_image(image3_ori)
+  # file_path_3 = save_cropped_image(resized_image_3, 'resized_image_3.jpg')
+
+  record_of_test.append([id, image_dir, ground_truth, category, image2_bbox, image3_bbox])
+
+  with open(filename, 'w') as f:
+    json.dump(record_of_test, f, indent=4) 
+  torch.cuda.empty_cache()
+
+def main():
+  global model
+  global filename 
+  global client
   parser = argparse.ArgumentParser()
-  parser.add_argument("--json_file_path", type=str, required=True)
-  parser.add_argument("--original_json_file_path", type=str, required=True)
-  parser.add_argument("--image_directory", type=str, required=True)
-  parser.add_argument("--list_of_history_dir", type=str, required=True)
+  parser.add_argument("--WEIGHTS_PATH", type=str, required=True)
+  parser.add_argument("--json_dir", type=str, required=True)
+  parser.add_argument("--CONFIG_PATH", type=str, required=True)
+  parser.add_argument("--HOME", type=str, required=True)
   parser.add_argument("--API_KEY", type=str, required=True)
 
-
   args = parser.parse_args()
+
   print(args)
 
-  json_file_path = args.json_file_path
-  original_json_file_path = args.original_json_file_path
-  image_directory = args.image_directory
-  list_of_history_dir = args.list_of_history_dir
+  WEIGHTS_PATH = args.WEIGHTS_PATH
+  json_dir = args.json_dir
+  CONFIG_PATH = args.CONFIG_PATH
+  HOME = args.HOME
   API_KEY = args.API_KEY
 
-  print("json_file_path: ", json_file_path)
-  print("original_json_file_path: ", original_json_file_path)
-  print("image_directory: ", image_directory)
-  print("list_of_history_dir: ", list_of_history_dir)
+  print("WEIGHTS_PATH: ", WEIGHTS_PATH)
+  print("json_dir: ", json_dir)
+  print("CONFIG_PATH: ", CONFIG_PATH)
+  print("HOME: ", HOME)
   print("API_KEY: ", API_KEY)
+  
+  model = load_model(CONFIG_PATH, WEIGHTS_PATH)
+  device = torch.device("cpu")
+  model = model.to(device)
 
 
-  categories = []
-  for entry in data:
-      category = entry[3]
-      if category not in categories:
-          categories.append(category)
 
-  print(categories)
+  with open(json_dir, 'r') as file:
+      questions_box = json.load(file)
 
-  # categories = ['position', 'vehicle/counting', 'Attribute_Motion_MultiPedestrians', 'Relation_Interaction_Other2Other', 'vehicle/attribute/orientation', 'color', 'Prediction_Intention_Pedestrian', 'Relation_Interaction_Ego2Pedestrain', 'count', 'vehicle/location', 'Attribute_Motion_MultiVehicles', 'Objects_Identify', 'Person/counting', 'person/counting', 'Object_Count', 'vehicle/attribute/color', 'Attribute_Motion_Pedestrain', 'Attention_TrafficSignal', 'Prediction_Intention_Ego', 'Attribute_Visual_TrafficSignal', 'person/attribute/color', 'calculate', 'property', 'Vehicle/counting', 'person/attribute/orientation', 'Relation_Interaction_Ego2Vehicle', 'Prediction_Intention_Vehicle', 'Relation_Interaction_Ego2TrafficSignal', 'Attribute_Motion_Vehicle', 'intention']
-  ans_ac_1 = {category: 0 for category in categories}
-  ans_wa_1 = {category: 0 for category in categories}
-  ans_ac_2 = {category: 0 for category in categories}
-  ans_wa_2 = {category: 0 for category in categories}
-  ans_ac_3 = {category: 0 for category in categories}
-  ans_wa_3 = {category: 0 for category in categories}
-  ans_ac_4 = {category: 0 for category in categories}
-  ans_wa_4 = {category: 0 for category in categories}
+  with open(json_dir, 'r') as file:
+      json_data = json.load(file)
 
+
+  os.environ["QWEN_API_KEY"] = os.environ["DASHSCOPE_API_KEY"] = API_KEY
 
   client = OpenAI(
       api_key=os.getenv("DASHSCOPE_API_KEY"),
       base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
   )
-  
-
-  # json_file_path = os.environ.get("json_file_path")
-  # original_json_file_path = os.environ.get("original_json_file_path")
-  # image_directory = os.environ.get("image_directory")
-  # API_KEY = os.environ.get("API_KEY")
 
 
-
-  # os.environ["DASHSCOPE_API_KEY"] = API_KEY
-
-
-  for entry in tqdm(data, desc="Processing entries", unit="entry"):    
-      image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4 = None, None, None, None, None, None, None, None, None, None, None, None
-      image_id = entry[0]
-      flag = False
-      for history in list_of_history:
-        history_id = history[0]
-        if image_id == history_id:
-          print(history)
-          flag = True
-          image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4 = history
-          break
-      if flag == False:
-        image_file = None
-        question = None
-        choises = None
-        ground_truth = None
-        matched_json_data = None
-        for json_data in original_data:
-            id = json_data.get("Question_id")
-            # if id.rsplit('/', 1)[-1] == image_id.rsplit('/', 1)[-1]:
-            if id == image_id:
-                print("found id: ", id)
-                matched_json_data = json_data
-                image = json_data.get("Image")
-                choises = json_data.get("Answer choices")
-                category_in_json = json_data.get("Category")
-                image_file = os.path.join(image_directory, image)
-                question = json_data.get("Text")
-                ground_truth = json_data.get("Ground truth")
-                break
-            else:
-              pass
-                # print(id.rsplit('/', 1)[-1], image_id.rsplit('/', 1)[-1])
-        if category_in_json in categories:
-          pass
-        else:
-          print(category_in_json, "is not in categories")
-          continue
-        if os.path.exists(image_file):
-            print("Detected: ", image_file)
-            image = Image.open(image_file)
-            # draw = ImageDraw.Draw(image)
-
-            image2_bbox = entry[4]  # image2_bbox
-            image3_bbox = entry[5]  # image3_bbox
-
-            
-            image = Image.open(image_file)
+  completion = client.chat.completions.create(
+      model="qwen-plus",
+      messages=[
+          {'role': 'system', 'content': 'You are a helpful assistant.'},
+          {'role': 'user', 'content': 'Who are you?'}],
+      )
+  response_content = completion.choices[0].message.content
+  print(response_content)
 
 
-            # rect1 = patches.Rectangle((image2_bbox[0], image2_bbox[1]), 
-            #                         image2_bbox[2] - image2_bbox[0], 
-            #                         image2_bbox[3] - image2_bbox[1], 
-            #                         linewidth=2, edgecolor='red', facecolor='none')
-            # rect2 = patches.Rectangle((image3_bbox[0], image3_bbox[1]), 
-            #                         image3_bbox[2] - image3_bbox[0], 
-            #                         image3_bbox[3] - image3_bbox[1], 
-            #                         linewidth=2, edgecolor='blue', facecolor='none')
-            # fig, ax = plt.subplots(1)
-            # ax.imshow(image)
-            # ax.add_patch(rect1)
-            # ax.add_patch(rect2)
-            # plt.title(question + "\n" + choises[0] + "\n" + choises[1] + "\n" + choises[2] + "\n" + choises[3] + "\n" + choises[4] + ground_truth)
-            # plt.show()
-            
+  temp_questions_box = []
+  list_of_category = []
 
-            image2_ori = Image.open(image_file).crop(image2_bbox).convert('RGB')
-            image3_ori = Image.open(image_file).crop(image3_bbox).convert('RGB')
-            reasked_question = remove_position_cue_qwen(question)
-            
-            print("image2: ", image2_bbox)
-            print("image3: ", image3_bbox)
-            
-            image2_bbox_01 = [image2_bbox[0] * 1.00 / image.width, image2_bbox[1] * 1.00 / image.height, image2_bbox[2] * 1.00 / image.width, image2_bbox[3] * 1.00 / image.height]
-            image3_bbox_01 = [image3_bbox[0] * 1.00 / image.width, image3_bbox[1] * 1.00 / image.height, image3_bbox[2] * 1.00 / image.width, image3_bbox[3] * 1.00 / image.height]
+  for json_data in questions_box:
+    image_path = os.path.join(HOME, json_data.get("Image"))
+    # print(image_path)
+    if os.path.exists(image_path):
+      try:
+          with Image.open(image_path) as img:
+              # img.crop([0,0,1,1])
+              temp_questions_box.append(json_data)
+              print(f"Processing {image_path}")
+      except (IOError, UnidentifiedImageError):
+          print(f"Can't Processing {image_path}")
+      except OSError as e:
+          print(f"File Damaged {image_path} - {e}")
+  random.shuffle(temp_questions_box)
 
 
-            resized_image_1 = crop_image(image)
-            file_path_1 = save_cropped_image(resized_image_1, 'resized_image_1.jpg')
+  existed_questions_box = []
 
-            resized_image_2 = crop_image(image2_ori)
-            file_path_2 = save_cropped_image(resized_image_2, 'resized_image_2.jpg')
+  # print(temp_questions_box)
 
-            resized_image_3 = crop_image(image3_ori)
-            file_path_3 = save_cropped_image(resized_image_3, 'resized_image_3.jpg')
+  list_of_category.append("color")
+  list_of_category.append("count")
+  list_of_category.append("position")
+
+  # for json_data in temp_questions_box:
+  #   if json_data.get("Category") not in list_of_category:
+  #     list_of_category.append(json_data.get("Category"))
 
 
-            tasks = [
-                async_get_qwen_response(executor, matched_json_data, file_path_1, None, None, None, None, question, None),
-                async_get_qwen_response(executor, matched_json_data, file_path_1, None, file_path_3, None, image3_bbox_01, question, reasked_question),
-                async_get_qwen_response(executor, matched_json_data, file_path_1, file_path_2, None, image2_bbox_01, None, question, reasked_question),
-                async_get_qwen_response(executor, matched_json_data, file_path_1, file_path_2, file_path_3, image2_bbox_01, image3_bbox_01, question, reasked_question),
-            ]
+  for category in list_of_category:
+    # print(category)
+    cnt_existed = 0
+    for json_data in temp_questions_box:
+      if json_data.get("Category") == category and cnt_existed +1 <= 5:
+        image_path = os.path.join(HOME, json_data.get("Image"))
+        cnt_existed += 1
+        if os.path.exists(image_path):
+          existed_questions_box.append(json_data)
 
-            # 等待所有任务完成
-            results = await asyncio.gather(*tasks)
 
-            # 解析结果
-            response_1, judge_1 = results[0]
-            response_2, judge_2 = results[1]
-            response_3, judge_3 = results[2]
-            response_4, judge_4 = results[3]
-            # response_1, judge_1 = get_qwen_response(matched_json_data, file_path_1, None, None, None, None, question, None)
-            # response_2, judge_2 = get_qwen_response(matched_json_data, file_path_1, None, file_path_3, None, image3_bbox_01, question, reasked_question)
-            # response_3, judge_3 = get_qwen_response(matched_json_data, file_path_1, file_path_2, None, image2_bbox_01, None, question, reasked_question)
-            # response_4, judge_4 = get_qwen_response(matched_json_data, file_path_1, file_path_2, file_path_3, image2_bbox_01, image3_bbox_01, question, reasked_question)
 
-      # response_1, judge_1 = "Z", "WA"
-      if "AC" in judge_1:
-          ans_ac_1[category_in_json] += 1
-      else:
-          ans_wa_1[category_in_json] += 1
-      # response_2, judge_2 = "Z", "WA"
-      if "AC" in judge_2:
-          ans_ac_2[category_in_json] += 1
-      else:
-          ans_wa_2[category_in_json] += 1
-      # response_3, judge_3 = "Z", "WA"
-      if "AC" in judge_3:
-          ans_ac_3[category_in_json] += 1
-      else:
-          ans_wa_3[category_in_json] += 1
-      # response_3, judge_3 = "Z", "WA"
-      if "AC" in judge_4:
-          ans_ac_4[category_in_json] += 1
-      else:
-          ans_wa_4[category_in_json] += 1
-      print("Situation_1: ", response_1, judge_1)
-      print("Situation_2: ", response_2, judge_2)
-      print("Situation_3: ", response_3, judge_3)
-      print("Situation_4: ", response_4, judge_4)
-      # if "WA" in judge_1 and "AC" in judge_2 and "WA" in judge_3:
-      #   print("GET:                                                                              ", image_id)
-      for category in categories:
-          print("-------- Category: ", category, "--------")
-          print("Situation_1, AC: ", ans_ac_1[category], "WA: ", ans_wa_1[category], "TOT: ", ans_ac_1[category] + ans_wa_1[category])
-          print("Situation_2, AC: ", ans_ac_2[category], "WA: ", ans_wa_2[category], "TOT: ", ans_ac_2[category] + ans_wa_2[category])
-          print("Situation_3, AC: ", ans_ac_3[category], "WA: ", ans_wa_3[category], "TOT: ", ans_ac_3[category] + ans_wa_3[category])
-          print("Situation_4, AC: ", ans_ac_4[category], "WA: ", ans_wa_4[category], "TOT: ", ans_ac_4[category] + ans_wa_4[category])
-      # print(entry[2], ac1, ac2, ac3)
-          
-      # else:
-      #     print(f"Image file not found: {image_file}")"
-      list_of_history.append([image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4])
-      # dump list_of_history to .json file
-      with open(list_of_history_dir, 'w') as f:
-        json.dump(list_of_history, f)
+  timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+  filename = f'record_of_test.json'
 
-asyncio.run(main())
+  for json_data in tqdm(existed_questions_box, desc="Processing questions", unit="question"):
+    image_path = os.path.join(HOME, json_data.get("Image"))
+    # print(image_path)
+    if os.path.exists(image_path):
+      print(image_path)
+
+      image = Image.open(image_path)
+      related_bbox_2, related_bbox_3 = Simple_VG(image_path, json_data.get('Text'))
+      judge_qwen_api(json_data, image_path, related_bbox_2, related_bbox_3)
+    else:
+      print("File does not exist.")
+
+if __name__ == "__main__":
+    main()
