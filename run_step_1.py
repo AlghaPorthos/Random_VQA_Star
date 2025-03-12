@@ -27,6 +27,7 @@ import argparse
 # HOME = os.getcwd()
 # print(HOME)
 model = None
+filename = None
 """
 Run with:
 CUDA_VISIBLE_DEVICES=5 HF_ENDPOINT=https://hf-mirror.com \
@@ -515,6 +516,7 @@ record_of_test = []
 
 def judge_qwen_api(item, image_dir, image2_bbox, image3_bbox):
   global record_of_test
+  global filename 
   print("item: ", item)
   print("image_dir: ", image_dir)
   print("image2_bbox: ", image2_bbox)
@@ -562,6 +564,7 @@ def judge_qwen_api(item, image_dir, image2_bbox, image3_bbox):
 
 def main():
   global model
+  global filename 
   parser = argparse.ArgumentParser()
   parser.add_argument("--WEIGHTS_PATH", type=str, required=True)
   parser.add_argument("--json_dir", type=str, required=True)
