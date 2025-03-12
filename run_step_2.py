@@ -31,33 +31,11 @@ def save_cropped_image(image: Image.Image, filename: str):
     image.save(file_path)
     return file_path
 
-
-categories = []
-for entry in data:
-    category = entry[3]
-    if category not in categories:
-        categories.append(category)
-
-print(categories)
-
-# categories = ['position', 'vehicle/counting', 'Attribute_Motion_MultiPedestrians', 'Relation_Interaction_Other2Other', 'vehicle/attribute/orientation', 'color', 'Prediction_Intention_Pedestrian', 'Relation_Interaction_Ego2Pedestrain', 'count', 'vehicle/location', 'Attribute_Motion_MultiVehicles', 'Objects_Identify', 'Person/counting', 'person/counting', 'Object_Count', 'vehicle/attribute/color', 'Attribute_Motion_Pedestrain', 'Attention_TrafficSignal', 'Prediction_Intention_Ego', 'Attribute_Visual_TrafficSignal', 'person/attribute/color', 'calculate', 'property', 'Vehicle/counting', 'person/attribute/orientation', 'Relation_Interaction_Ego2Vehicle', 'Prediction_Intention_Vehicle', 'Relation_Interaction_Ego2TrafficSignal', 'Attribute_Motion_Vehicle', 'intention']
-ans_ac_1 = {category: 0 for category in categories}
-ans_wa_1 = {category: 0 for category in categories}
-ans_ac_2 = {category: 0 for category in categories}
-ans_wa_2 = {category: 0 for category in categories}
-ans_ac_3 = {category: 0 for category in categories}
-ans_wa_3 = {category: 0 for category in categories}
-ans_ac_4 = {category: 0 for category in categories}
-ans_wa_4 = {category: 0 for category in categories}
-
-
-client = OpenAI(
-    api_key=os.getenv("DASHSCOPE_API_KEY"),
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-)
+client = None
 
 def get_qwen_response(item, file_path_1, file_path_2, file_path_3, image2_bbox, image3_bbox, question = None, reasked_question = None):
 #   return "Z", "WA" 
+  global client
   id = item["Question_id"]
   # image = item["Image"]
   if question is None:
@@ -294,6 +272,7 @@ def position_cue_qwen(sentence, w = 1.00, h = 1.00):
     return final_bbox, most_similar
 
 def remove_position_cue_qwen(sentence):
+  global client
   for i in range(1):
     related_bbox, pos_cue = position_cue_qwen(sentence)
     if pos_cue == 'full frame':
@@ -314,7 +293,8 @@ def remove_position_cue_qwen(sentence):
   return sentence
 async def main():
   executor = ThreadPoolExecutor()
-  random.shuffle(data)
+  global client
+  
 
   parser = argparse.ArgumentParser()
   parser.add_argument("--json_file_path", type=str, required=True)
@@ -338,8 +318,44 @@ async def main():
   print("image_directory: ", image_directory)
   print("list_of_history_dir: ", list_of_history_dir)
   print("API_KEY: ", API_KEY)
+  
+  with open(json_file_path, 'r', encoding='utf-8') as f:
+      data = json.load(f)
+
+  with open(original_json_file_path, 'r', encoding='utf-8') as f:
+      original_data = json.load(f)
+
+  with open(list_of_history_dir, 'r', encoding='utf-8') as f:
+      list_of_history = json.load(f)
 
 
+  random.shuffle(data)
+
+
+
+  categories = []
+  for entry in data:
+      category = entry[3]
+      if category not in categories:
+          categories.append(category)
+
+  print(categories)
+
+  # categories = ['position', 'vehicle/counting', 'Attribute_Motion_MultiPedestrians', 'Relation_Interaction_Other2Other', 'vehicle/attribute/orientation', 'color', 'Prediction_Intention_Pedestrian', 'Relation_Interaction_Ego2Pedestrain', 'count', 'vehicle/location', 'Attribute_Motion_MultiVehicles', 'Objects_Identify', 'Person/counting', 'person/counting', 'Object_Count', 'vehicle/attribute/color', 'Attribute_Motion_Pedestrain', 'Attention_TrafficSignal', 'Prediction_Intention_Ego', 'Attribute_Visual_TrafficSignal', 'person/attribute/color', 'calculate', 'property', 'Vehicle/counting', 'person/attribute/orientation', 'Relation_Interaction_Ego2Vehicle', 'Prediction_Intention_Vehicle', 'Relation_Interaction_Ego2TrafficSignal', 'Attribute_Motion_Vehicle', 'intention']
+  ans_ac_1 = {category: 0 for category in categories}
+  ans_wa_1 = {category: 0 for category in categories}
+  ans_ac_2 = {category: 0 for category in categories}
+  ans_wa_2 = {category: 0 for category in categories}
+  ans_ac_3 = {category: 0 for category in categories}
+  ans_wa_3 = {category: 0 for category in categories}
+  ans_ac_4 = {category: 0 for category in categories}
+  ans_wa_4 = {category: 0 for category in categories}
+
+
+  client = OpenAI(
+      api_key=os.getenv("DASHSCOPE_API_KEY"),
+      base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+  )
   
 
   # json_file_path = os.environ.get("json_file_path")
@@ -351,15 +367,6 @@ async def main():
 
   # os.environ["DASHSCOPE_API_KEY"] = API_KEY
 
-
-  with open(json_file_path, 'r', encoding='utf-8') as f:
-      data = json.load(f)
-
-  with open(original_json_file_path, 'r', encoding='utf-8') as f:
-      original_data = json.load(f)
-
-  with open(list_of_history_dir, 'r', encoding='utf-8') as f:
-      list_of_history = json.load(f)
 
   for entry in tqdm(data, desc="Processing entries", unit="entry"):    
       image_id, question, reasked_question, category_in_json, response_1, judge_1, response_2, judge_2, response_3, judge_3, response_4, judge_4 = None, None, None, None, None, None, None, None, None, None, None, None
