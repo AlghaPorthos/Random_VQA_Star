@@ -312,13 +312,14 @@ async def main():
   image_directory = args.image_directory
   list_of_history_dir = args.list_of_history_dir
   API_KEY = args.API_KEY
+  os.environ["QWEN_API_KEY"] = os.environ["DASHSCOPE_API_KEY"] = API_KEY
 
   print("json_file_path: ", json_file_path)
   print("original_json_file_path: ", original_json_file_path)
   print("image_directory: ", image_directory)
   print("list_of_history_dir: ", list_of_history_dir)
   print("API_KEY: ", API_KEY)
-  
+
   with open(json_file_path, 'r', encoding='utf-8') as f:
       data = json.load(f)
 
