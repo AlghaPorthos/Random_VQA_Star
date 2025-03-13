@@ -467,19 +467,19 @@ def Simple_VG(image_dir, question, min_res = 1500):
 
     if 2 * (current_priority) < max_patch['priority_score'] or cnt_item_queue > 20:
       break
-    # crop_coords = get_sub_patches(current_bbox, current_suffix)
-    crop_coords = get_sub_patches_by_random_cropping(current_bbox, current_suffix, current_heatmap)
+    if len(current_bbox) <= 1:
+      crop_coords = get_sub_patches_by_random_cropping(current_bbox, current_suffix, current_heatmap)
 
-    # print(crop_coords)
+      # print(crop_coords)
 
-    if max(current_bbox[2] - current_bbox[0], current_bbox[3] - current_bbox[1]) >= min_res:
-      for clip_suffix, clip_bbox in crop_coords:
-        clip_patch = dict()
-        clip_patch['bbox'] = clip_bbox
-        clip_patch['suffix'] = clip_suffix
-        
-        clip_patch['heatmap'], clip_patch['priority_score'] = get_judge_value_without_noun_list(image, question, clip_bbox)
-        queue.put(Prioritize(-clip_patch['priority_score'], clip_patch))
+      if max(current_bbox[2] - current_bbox[0], current_bbox[3] - current_bbox[1]) >= min_res:
+        for clip_suffix, clip_bbox in crop_coords:
+          clip_patch = dict()
+          clip_patch['bbox'] = clip_bbox
+          clip_patch['suffix'] = clip_suffix
+          
+          clip_patch['heatmap'], clip_patch['priority_score'] = get_judge_value_without_noun_list(image, question, clip_bbox)
+          queue.put(Prioritize(-clip_patch['priority_score'], clip_patch))
   return related_bbox_2, max_patch['bbox']
 
 ans_tot = 0
