@@ -467,7 +467,7 @@ def Simple_VG(image_dir, question, min_res = 1500):
 
     if 2 * (current_priority) < max_patch['priority_score'] or cnt_item_queue > 20:
       break
-    if len(current_bbox) <= 1:
+    if len(current_suffix) <= 1:
       crop_coords = get_sub_patches_by_random_cropping(current_bbox, current_suffix, current_heatmap)
 
       # print(crop_coords)
