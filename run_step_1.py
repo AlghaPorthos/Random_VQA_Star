@@ -649,6 +649,13 @@ def main():
   list_of_category.append("color")
   list_of_category.append("count")
   list_of_category.append("position")
+  list_of_category.append("Relation_Interaction_Ego2Vehicle")
+  list_of_category.append("Attribute_Motion_Pedestrain")
+  list_of_category.append("Attribute_Motion_Vehicle")
+  list_of_category.append("Relation_Interaction_Ego2Pedestrain")
+  list_of_category.append("Attribute_Visual_TrafficSignal")
+  list_of_category.append("Relation_Interaction_Ego2TrafficSignal")
+
 
   # for json_data in temp_questions_box:
   #   if json_data.get("Category") not in list_of_category:
