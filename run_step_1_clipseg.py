@@ -131,8 +131,10 @@ for category in list_of_category:
 
 json_data = existed_questions_box
 random.shuffle(json_data)
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-filename = f'record_of_test_{timestamp}.json'
+# timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+# filename = f'record_of_test_{timestamp}.json'
+filename = f'record_of_test.json'
+
 
 
 if os.path.exists(filename):
