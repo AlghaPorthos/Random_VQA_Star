@@ -513,24 +513,24 @@ def get_judge_value_with_clipseg(image, text_prompt, labels, bbox):
     else:
       general_heatmap *= (heatmap + 1)
   
-  num_heatmaps = len(heat_maps)
-  fig, axes = plt.subplots(1, num_heatmaps + 1, figsize=(15, 5))
+  # num_heatmaps = len(heat_maps)
+  # fig, axes = plt.subplots(1, num_heatmaps + 1, figsize=(15, 5))
 
   # 显示原图
-  axes[0].imshow(image)
-  axes[0].set_title("Original Image")
-  axes[0].axis('off')  # 关闭坐标轴
+  # axes[0].imshow(image)
+  # axes[0].set_title("Original Image")
+  # axes[0].axis('off')  # 关闭坐标轴
 
-  # 显示每个热图
-  for i, heat_map in enumerate(heat_maps):
-    axes[i + 1].imshow(heat_map, cmap='hot')  # 使用 'hot' 颜色图
-    axes[i + 1].set_title(f"{labels[i]}_{heat_map.max():.3f}")  # 设置标题为标签
-    axes[i + 1].axis('off')  # 关闭坐标轴
+  # # 显示每个热图
+  # for i, heat_map in enumerate(heat_maps):
+  #   axes[i + 1].imshow(heat_map, cmap='hot')  # 使用 'hot' 颜色图
+  #   axes[i + 1].set_title(f"{labels[i]}_{heat_map.max():.3f}")  # 设置标题为标签
+  #   axes[i + 1].axis('off')  # 关闭坐标轴
 
-  # plt.tight_layout()
-  # plt.show()
-  plt.savefig(f"temp_output_test/{bbox}.png", bbox_inches='tight', dpi=1200)  # 修改文件名和格式
-  plt.close('all') 
+  # # plt.tight_layout()
+  # # plt.show()
+  # plt.savefig(f"temp_output_test/{bbox}.png", bbox_inches='tight', dpi=1200)  # 修改文件名和格式
+  # plt.close('all') 
   return general_heatmap, general_heatmap.max()*10+general_heatmap.mean() # + (np.log10(bbox[2] - bbox[0]) + np.log10(bbox[3] - bbox[1]))*0.50
 
 
