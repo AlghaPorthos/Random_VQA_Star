@@ -1,35 +1,34 @@
 import os
 import torch
-import torchvision
+# import torchvision
 import numpy as np
 import matplotlib.pyplot as plt
 from queue import PriorityQueue
 from PIL import Image, UnidentifiedImageError  
-from groundingdino.util.inference import load_model, load_image, predict, annotate
-import groundingdino.datasets.transforms as T
-from IPython.display import display
+# from groundingdino.util.inference import load_model, load_image, predict, annotate
+# import groundingdino.datasets.transforms as T
+# from IPython.display import display
 from PIL import Image
 import base64
 import random
 import json
-from torchvision import transforms
-from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor
-from qwen_vl_utils import process_vision_info
+# from torchvision import transforms
+# from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+# from qwen_vl_utils import process_vision_info
 import torch
-import time
-import dashscope
+# import time
+# import dashscope
 from datetime import datetime
 from openai import APIConnectionError
 from tqdm import tqdm
 from openai import OpenAI
 import torch
 import torch.nn.functional as F
+import argparse
 
 from transformers import AutoProcessor, CLIPSegForImageSegmentation
 from PIL import Image
-import requests
-
-import argparse
+# import requests
 
 processor_of_clipseg = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
 model_of_clipseg = CLIPSegForImageSegmentation.from_pretrained("CIDAS/clipseg-rd64-refined")
@@ -52,14 +51,14 @@ parser.add_argument("--HOME", type=str, required=True)
 parser.add_argument("--API_KEY", type=str, required=True)
 args = parser.parse_args()
 print(args)
-WEIGHTS_PATH = args.WEIGHTS_PATH
+# WEIGHTS_PATH = args.WEIGHTS_PATH
 json_dir = args.json_dir
-CONFIG_PATH = args.CONFIG_PATH
+# CONFIG_PATH = args.CONFIG_PATH
 HOME = args.HOME
 API_KEY = args.API_KEY
-print("WEIGHTS_PATH: ", WEIGHTS_PATH)
+# print("WEIGHTS_PATH: ", WEIGHTS_PATH)
 print("json_dir: ", json_dir)
-print("CONFIG_PATH: ", CONFIG_PATH)
+# print("CONFIG_PATH: ", CONFIG_PATH)
 print("HOME: ", HOME)
 print("API_KEY: ", API_KEY)
 
@@ -582,13 +581,6 @@ def Simple_VG(image_dir, question, min_res = 1500):
   question_without_pos = remove_position_cue_qwen(question, pos_cue)
   print(f"question_without_pos: {question_without_pos}")
   queue = PriorityQueue()
-  transform = T.Compose(
-    [
-      T.RandomResize([800], max_size=1333),
-      T.ToTensor(),
-      T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-    ]
-  )
 
   # image_source = image.convert("RGB")
   # image_np = np.asarray(image_source)
